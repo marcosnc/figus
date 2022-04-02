@@ -8,8 +8,8 @@ import { ethers } from 'hardhat';
 chai.use(smock.matchers);
 
 describe('Figus', () => {
-//   let figus: MockContract<Figus>;
-//   let figusFactory: MockContractFactory<Figus__factory>;
+  //   let figus: MockContract<Figus>;
+  //   let figusFactory: MockContractFactory<Figus__factory>;
 
   let figus: Figus;
   let figusFactory: Figus__factory;
@@ -20,9 +20,7 @@ describe('Figus', () => {
     // figusFactory = await smock.mock<Figus__factory>('Figus');
     // figus = await figusFactory.deploy('https://figus.it/{id}.json');
 
-    figusFactory = await ethers.getContractFactory(
-        'solidity/contracts/Figus.sol:Figus'
-    );
+    figusFactory = await ethers.getContractFactory('solidity/contracts/Figus.sol:Figus');
     figus = await figusFactory.deploy('https://figus.it/{id}.json');
 
     snapshotId = await evm.snapshot.take();
@@ -36,47 +34,50 @@ describe('Figus', () => {
     const uri = await figus.callStatic.uri(1);
     expect(uri).to.equal('https://figus.it/{id}.json');
 
-    const owner: string = await figus.signer.getAddress()
+    const owner: string = await figus.signer.getAddress();
 
     // Create the first collection and check ids and available amounts are ok
-    const collection0FigusAmounts = [10, 23, 15]
-    const collection0ExpectedId = 0
-    const collection0: ContractTransaction = await figus.createNewCollection(collection0FigusAmounts, {from: owner});
-    await expect(collection0).to.emit(figus, 'NewCollectionCreated').withArgs(collection0ExpectedId);
-    expect(await figus.collectionIds(collection0ExpectedId)).to.equal(collection0FigusAmounts.length)
-    for(let i=0; i < collection0FigusAmounts.length; i++) {
-        expect(await figus.availableFigus(collection0ExpectedId+1+i)).to.equal(collection0FigusAmounts[i])
-    }
+    createCollectionAndValidate(figus, owner, [10, 23, 15], 1, 1);
 
     // Create a new collection and check ids and available amounts are ok
-    const collection1FigusAmounts = [21, 22, 23, 24]
-    const collection1ExpectedId = collection0ExpectedId + collection0FigusAmounts.length + 1
-    const collection1: ContractTransaction = await figus.createNewCollection(collection1FigusAmounts, {from: owner});
-    await expect(collection1).to.emit(figus, 'NewCollectionCreated').withArgs(collection1ExpectedId);
-    expect(await figus.collectionIds(collection1ExpectedId)).to.equal(collection1FigusAmounts.length)
-    for(let i=0; i < collection1FigusAmounts.length; i++) {
-        expect(await figus.availableFigus(collection1ExpectedId+1+i)).to.equal(collection1FigusAmounts[i])
-    }
+    createCollectionAndValidate(figus, owner, [21, 22, 23, 24], 2, 4);
 
     // Retrieve all the collections and figus ids
-    let collectionId = 0
-    let figusInCollection
-    while((figusInCollection = (await figus.collectionIds(collectionId)).toNumber()) > 0) {
-        const firstFiguId = collectionId + 1
-        const lastFiguId  = collectionId + figusInCollection
-        console.log("--------------------------------------------------")
-        console.log("Collection Id      : ", collectionId)
-        console.log("Figus in Collection: ", figusInCollection)
-        console.log("First Figus Id     : ", firstFiguId)
-        console.log("Last  Figus Id     : ", lastFiguId)
-        console.log("Available items for each figu:")
-        for(let figuId = firstFiguId; figuId <= lastFiguId; figuId++) {
-            const availableFigus = (await figus.availableFigus(figuId)).toNumber()
-            console.log(`  Figu Id: ${figuId}, available items: ${availableFigus}`)
-        }
-        collectionId = lastFiguId + 1
+    let collectionId = 1;
+    let collectionInfo;
+    while ((collectionInfo = await figus.collectionsInfo(collectionId)).collectionSize > 0) {
+      const firstFiguId = collectionInfo.firstFiguId.toNumber();
+      const figusInCollection = collectionInfo.collectionSize;
+      const lastFiguId = firstFiguId + figusInCollection - 1;
+      console.log('--------------------------------------------------');
+      console.log('Collection Id      : ', collectionId);
+      console.log('Figus in Collection: ', figusInCollection);
+      console.log('First Figus Id     : ', firstFiguId);
+      console.log('Last  Figus Id     : ', lastFiguId);
+      console.log('Available items for each figu:');
+      for (let figuId = firstFiguId; figuId <= lastFiguId; figuId++) {
+        const availableFigus = (await figus.availableFigus(figuId)).toNumber();
+        console.log(`  Figu Id: ${figuId}, available items: ${availableFigus}`);
+      }
+      collectionId = collectionId + 1;
     }
-    console.log("--------------------------------------------------")
-
+    console.log('--------------------------------------------------');
   });
 });
+
+async function createCollectionAndValidate(
+  figus: Figus,
+  owner: string,
+  figusAmounts: number[],
+  expectedCollectionId: number,
+  expectedFirstFiguId: number
+) {
+  const collection: ContractTransaction = await figus.createNewCollection(figusAmounts, { from: owner });
+  await expect(collection).to.emit(figus, 'NewCollectionCreated').withArgs(expectedCollectionId, expectedFirstFiguId);
+  const collectionInfo = await figus.collectionsInfo(expectedCollectionId);
+  expect(collectionInfo.firstFiguId).to.equal(expectedFirstFiguId);
+  expect(collectionInfo.collectionSize).to.equal(figusAmounts.length);
+  for (let i = 0; i < figusAmounts.length; i++) {
+    expect(await figus.availableFigus(expectedFirstFiguId + i)).to.equal(figusAmounts[i]);
+  }
+}

@@ -5,53 +5,56 @@ pragma solidity ^0.8.0;
 import '@openzeppelin/contracts/token/ERC1155/ERC1155.sol';
 
 contract Figus is ERC1155 {
-    event NewCollectionCreated(uint256 collectionId);
+  event NewCollectionCreated(uint256 collectionId, uint256 firstFiguId);
 
-    uint256 private _nextCollectionId;
+  uint256 private _nextCollectionId;
+  uint256 private _nextFiguId;
 
-    // collectionId => amount of figuIds on the collection
-    //   This mapping is filled by the createNewCollection method and can be used to identify which figuIds belong to each collection
-    mapping(uint256 => uint256) public collectionIds;
+  struct CollectionInfo {
+    uint240 firstFiguId; // 30 Bytes // Slot 1
+    uint16 collectionSize; //  2 Bytes // Slot 1
+  }
 
-    // figuId => available amount to be minted
-    //   This mappin indicates how many instances can be still minted for a particular figuId
-    mapping(uint256 => uint256) public availableFigus;
+  // collectionId => CollectionInfo
+  //   This mapping is filled by the createNewCollection method and can be used to identify which figuIds belong to each collection
+  mapping(uint256 => CollectionInfo) public collectionsInfo;
 
-    constructor(string memory uri_) ERC1155(uri_) { }
+  // figuId => available amount to be minted
+  //   This mapping indicates how many instances can be still minted for a particular figuId
+  mapping(uint256 => uint256) public availableFigus;
 
-    function createNewCollection(uint256[] memory figusAmounts) public virtual returns (uint256 collectionId, uint256[] memory figusIds) {
-        // Checks
-        require(figusAmounts.length > 0, 'Empty Amounts');
+  constructor(string memory uri_) ERC1155(uri_) {}
 
-        // Effects
-        collectionId = _nextCollectionId;
-        collectionIds[collectionId] = figusAmounts.length;
-        figusIds = new uint256[](figusAmounts.length);
-        for (uint256 i; i < figusIds.length; i++) {
-            figusIds[i] = collectionId + 1 + i;
-            availableFigus[figusIds[i]] = figusAmounts[i];
-        }
+  function createNewCollection(uint256[] memory figusAmounts) public virtual returns (uint256 collectionId, uint256[] memory figusIds) {
+    // Checks
+    require(figusAmounts.length > 0, 'Empty Amounts');
 
-        _nextCollectionId += figusAmounts.length + 1;
-
-        // Interactions
-        emit NewCollectionCreated(collectionId);
-
-        return (collectionId, figusIds);
+    // Effects
+    collectionId = ++_nextCollectionId;
+    collectionsInfo[collectionId] = CollectionInfo({firstFiguId: uint240(_nextFiguId + 1), collectionSize: uint16(figusAmounts.length)});
+    figusIds = new uint256[](figusAmounts.length);
+    for (uint256 i; i < figusIds.length; i++) {
+      figusIds[i] = ++_nextFiguId;
+      availableFigus[figusIds[i]] = figusAmounts[i];
     }
 
-    function buyFigus(uint256[] memory figusIds, uint256[] memory figusAmounts) public {
-        // Checks
-        require(figusIds.length > 0, 'Empty Ids');
-        require(figusIds.length == figusAmounts.length, 'Different Sizes');
+    // Interactions
+    emit NewCollectionCreated(collectionId, collectionsInfo[collectionId].firstFiguId);
 
-        // Effects
-        for (uint256 i; i < figusIds.length; i++) {
-            require(availableFigus[figusIds[i]] >= figusAmounts[i], 'Not Enough');
-            availableFigus[figusIds[i]] -= figusAmounts[i];
-        }
-        _mintBatch(msg.sender, figusIds, figusAmounts, '');
+    return (collectionId, figusIds);
+  }
 
-        // Interactions
+  function buyFigus(uint256[] memory figusIds, uint256[] memory figusAmounts) public {
+    // Checks
+    require(figusIds.length > 0, 'Empty Ids');
+    require(figusIds.length == figusAmounts.length, 'Different Sizes');
+
+    // Effects
+    for (uint256 i; i < figusIds.length; i++) {
+      availableFigus[figusIds[i]] -= figusAmounts[i]; // Assuming an error is raised if availableFigus[figusIds[i]] < 0
     }
+    _mintBatch(msg.sender, figusIds, figusAmounts, '');
+
+    // Interactions
+  }
 }
