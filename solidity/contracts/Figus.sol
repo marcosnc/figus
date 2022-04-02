@@ -7,8 +7,8 @@ import '@openzeppelin/contracts/token/ERC1155/ERC1155.sol';
 contract Figus is ERC1155 {
   event NewCollectionCreated(uint256 collectionId, uint256 firstFiguId);
 
-  uint256 private _nextCollectionId;
-  uint256 private _nextFiguId;
+  uint256 private _lastCollectionId;
+  uint256 private _lastFiguId;
 
   struct CollectionInfo {
     uint240 firstFiguId; // 30 Bytes // Slot 1
@@ -30,13 +30,15 @@ contract Figus is ERC1155 {
     require(figusAmounts.length > 0, 'Empty Amounts');
 
     // Effects
-    collectionId = ++_nextCollectionId;
-    collectionsInfo[collectionId] = CollectionInfo({firstFiguId: uint240(_nextFiguId + 1), collectionSize: uint16(figusAmounts.length)});
+    collectionId = ++_lastCollectionId;
+    collectionsInfo[collectionId] = CollectionInfo({firstFiguId: uint240(_lastFiguId + 1), collectionSize: uint16(figusAmounts.length)});
     figusIds = new uint256[](figusAmounts.length);
+    uint256 _figuId = _lastFiguId;
     for (uint256 i; i < figusIds.length; i++) {
-      figusIds[i] = ++_nextFiguId;
+      figusIds[i] = ++_figuId;
       availableFigus[figusIds[i]] = figusAmounts[i];
     }
+    _lastFiguId = _figuId;
 
     // Interactions
     emit NewCollectionCreated(collectionId, collectionsInfo[collectionId].firstFiguId);
